@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>成本利潤試算表</title>
+  <link rel="manifest" href="manifest.json" />
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+          .then(reg => console.log('SW registered', reg))
+          .catch(err => console.error('SW registration failed', err));
+      });
+    }
+  </script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 2rem;
+      background-color: #fafafa;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.5rem;
+      background-color: #fff;
+      border-radius: 0.5rem;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    th, td {
+      border-bottom: 1px solid #eee;
+      padding: 0.75rem;
+      text-align: center;
+    }
+    th {
+      background-color: #f0f0f0;
+      font-weight: 500;
+    }
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 0.4rem;
+      border: 1px solid #ddd;
+      border-radius: 0.25rem;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    .red {
+      color: #d33;
+      font-weight: bold;
+    }
+    .controls {
+      margin-top: 2rem;
+      display: grid;
+      gap: 0.8rem;
+    }
+    button {
+      padding: 0.6rem 1.2rem;
+      border: none;
+      background-color: #007aff;
+      color: white;
+      font-size: 0.95rem;
+      border-radius: 0.3rem;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #005fcc;
+    }
+    .icon-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      justify-content: center;
+    }
+    label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>成本利潤試算表</h1>
+  <table id="gpTable">
+    <thead>
+      <tr>
+        <th>名稱</th>
+        <th>售價</th>
+        <th>成本</th>
+        <th>利潤</th>
+        <th>毛利率%</th>
+        <th>目標毛利率%</th>
+        <th>備註</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+      <tr>
+        <td><input type="text" value="項目A" oninput="updateTable()" /></td>
+        <td><input type="number" class="price" oninput="updateTable()" /></td>
+        <td><input type="number" class="cost" oninput="updateTable()" /></td>
+        <td class="profit">-</td>
+        <td class="gp">-</td>
+        <td><input type="number" class="target-gp" placeholder="%" oninput="adjustRowByTargetGp(this)" /></td>
+        <td><input type="text" /></td>
+        <td><button class="delete-btn">🗑️</button></td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3">合計 / 平均</td>
+        <td id="totalProfit">$0</td>
+        <td id="avgGp">$0</td>
+        <td colspan="3">-</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="controls">
+    <button class="icon-button" onclick="addRow()">➕ 新增列</button>
+    <button class="icon-button" onclick="sortByName()">🔤 名稱排序</button>
+    <button class="icon-button" onclick="downloadExcel()">📥 匯出 Excel</button>
+    <button class="icon-button" onclick="uploadExcel()">📤 上傳 Excel</button>
+  </div>
+
+  <script>
+    const gpThreshold = 10;
+
+    function updateTable() {
+      const rows = document.querySelectorAll('#tableBody tr');
+      let totalProfit = 0;
+      let totalGp = 0;
+      let count = 0;
+
+      rows.forEach(row => {
+        const priceInput = row.querySelector('.price');
+        const costInput = row.querySelector('.cost');
+        const profitCell = row.querySelector('.profit');
+        const gpCell = row.querySelector('.gp');
+
+        const price = parseFloat(priceInput.value) || 0;
+        const cost = parseFloat(costInput.value) || 0;
+        const profit = price - cost;
+        const gp = price ? ((profit / price) * 100) : 0;
+
+        profitCell.textContent = `$${profit.toFixed(0)}`;
+        gpCell.textContent = `${gp.toFixed(0)}%`;
+        gpCell.className = gp < gpThreshold ? 'gp red' : 'gp';
+
+        totalProfit += profit;
+        totalGp += gp;
+        count++;
+      });
+
+      document.getElementById('totalProfit').textContent = `$${totalProfit.toFixed(0)}`;
+      document.getElementById('avgGp').textContent = count ? `${(totalGp / count).toFixed(0)}%` : '0%';
+    }
+
+    function adjustRowByTargetGp(input) {
+      const row = input.closest('tr');
+      const costInput = row.querySelector('.cost');
+      const priceInput = row.querySelector('.price');
+      const target = parseFloat(input.value);
+      const cost = parseFloat(costInput.value) || 0;
+
+      if (isNaN(target)) return;
+      if (target >= 100) {
+        alert('目標毛利率不可等於或超過 100%，請輸入小於 100 的數值');
+        return;
+      }
+
+      if (cost > 0) {
+        const newPrice = cost / (1 - target / 100);
+        priceInput.value = newPrice.toFixed(0);
+        updateTable();
+      }
+    }
+
+    function deleteRow(button) {
+      const row = button.closest('tr');
+      const tbody = document.getElementById('tableBody');
+      if (tbody.rows.length > 1) {
+        row.remove();
+        updateTable();
+      } else {
+        alert('至少保留一列');
+      }
+    }
+
+    function addRow() {
+      const tbody = document.getElementById('tableBody');
+      const newRow = tbody.rows[0].cloneNode(true);
+      newRow.querySelectorAll('input').forEach(input => {
+        input.value = '';
+        if (input.classList.contains('target-gp')) {
+          input.addEventListener('input', function () {
+            adjustRowByTargetGp(this);
+          });
+        } else {
+          input.addEventListener('input', updateTable);
+        }
+      });
+      newRow.querySelector('.profit').textContent = '-';
+      newRow.querySelector('.gp').textContent = '-';
+      newRow.querySelector('.delete-btn').addEventListener('click', function () {
+        deleteRow(this);
+      });
+      tbody.appendChild(newRow);
+    }
+
+    function sortByName() {
+      const tbody = document.getElementById('tableBody');
+      const rows = Array.from(tbody.rows);
+      rows.sort((a, b) => {
+        const nameA = a.cells[0].querySelector('input').value.toUpperCase();
+        const nameB = b.cells[0].querySelector('input').value.toUpperCase();
+        return nameA.localeCompare(nameB);
+      });
+      rows.forEach(row => tbody.appendChild(row));
+    }
+
+    function downloadExcel() {
+      const table = document.getElementById("gpTable");
+      const rows = table.querySelectorAll("tbody tr");
+      let csv = [['名稱', '售價', '成本', '利潤', '毛利率%', '目標毛利率%', '備註']];
+
+      rows.forEach((row, index) => {
+        const name = row.cells[0].querySelector("input").value;
+        const price = row.cells[1].querySelector("input").value;
+        const cost = row.cells[2].querySelector("input").value;
+        const targetGp = row.cells[5].querySelector("input").value;
+        const note = row.cells[6].querySelector("input").value;
+        const profitFormula = `=B${index + 2}-C${index + 2}`;
+        const gpFormula = `=IF(B${index + 2}=0,0,D${index + 2}/B${index + 2})`;
+        csv.push([name, price, cost, profitFormula, gpFormula, targetGp, note]);
+      });
+
+      const bom = '\uFEFF';
+      let csvContent = bom + csv.map(e => e.join(",")).join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "gp_試算表_含公式.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function uploadExcel() {
+      alert('此功能將於後續版本加入支援匯入 Excel');
+    }
+
+    function attachDeleteHandlers() {
+      document.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.onclick = () => deleteRow(btn);
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      attachDeleteHandlers();
+      document.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', updateTable);
+      });
+      updateTable();
+    });
+  </script>
+</body>
+</html>
