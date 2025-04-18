@@ -1,0 +1,245 @@
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>成本利潤試算表（含備註 / 自動排序 / 匯出含公式 / 反推售價 / 目標毛利率調整）</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: "微軟正黑體", sans-serif; padding: 20px; background: #f4f4f4; }
+    table { border-collapse: collapse; width: 100%; margin: auto; background: #ccc; }
+    th, td { border: 1px solid #999; padding: 10px; text-align: center; background: #ccc; }
+    input { width: 100%; text-align: right; font-size: 16px; padding: 4px; box-sizing: border-box; }
+    input.name, input.note { width: 120px; text-align: center; }
+    .center { text-align: center; margin-top: 20px; }
+    button { padding: 10px 20px; font-size: 14px; margin: 10px 5px; width: 100%; box-sizing: border-box; }
+    tfoot td { font-weight: bold; background: #eee; }
+    .low-margin { color: red; }
+    @media (max-width: 768px) {
+      table {
+        font-size: 12px;
+      }
+      input {
+        font-size: 14px;
+      }
+      button {
+        font-size: 12px;
+      }
+    }
+    @media (max-width: 480px) {
+      button {
+        font-size: 14px;
+        padding: 15px;
+      }
+      table {
+        font-size: 10px;
+      }
+      th, td {
+        padding: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h2 class="center">成本利潤試算表（含備註 / 自動排序 / 匯出含公式 / 反推售價 / 目標毛利率調整）</h2>
+  <table id="profitTable">
+    <thead>
+      <tr>
+        <th>名稱</th>
+        <th>售價</th>
+        <th>成本</th>
+        <th>利潤</th>
+        <th>毛利率%</th>
+        <th>備註</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><input class="name" value="項目A" /></td>
+        <td><input type="number" class="price" /></td>
+        <td><input type="number" class="cost" /></td>
+        <td class="profit">-</td>
+        <td class="margin">-</td>
+        <td><input class="note" /></td>
+      </tr>
+      <tr>
+        <td><input class="name" value="項目B" /></td>
+        <td><input type="number" class="price" /></td>
+        <td><input type="number" class="cost" /></td>
+        <td class="profit">-</td>
+        <td class="margin">-</td>
+        <td><input class="note" /></td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2">合計 / 平均</td>
+        <td id="sumPrice">-</td>
+        <td id="sumCost">-</td>
+        <td id="sumProfit">-</td>
+        <td id="avgMargin">-</td>
+      </tr>
+    </tfoot>
+  </table>
+  <div class="center">
+    <button onclick="addRow()">➕ 新增列</button>
+    <button onclick="sortRows()">🔃 名稱排序</button>
+    <button onclick="exportExcel()">📥 匯出 Excel (含公式)</button>
+    <button onclick="uploadExcel()">📤 上傳 Excel 並還原內容</button>
+    <div>
+      <label>調整毛利率：%</label>
+      <input type="number" id="marginChange" placeholder="輸入調整百分比" />
+      <button onclick="adjustMargin()">調整毛利率</button>
+    </div>
+  </div>
+
+<script>
+function formatMoney(num) {
+  return "$" + Number(num).toLocaleString();
+}
+
+function calculate() {
+  const rows = document.querySelectorAll("#profitTable tbody tr");
+  let sumPrice = 0, sumCost = 0, sumProfit = 0;
+
+  rows.forEach(row => {
+    const price = parseFloat(row.querySelector(".price")?.value || 0);
+    const cost = parseFloat(row.querySelector(".cost")?.value || 0);
+    const profitCell = row.querySelector(".profit");
+    const marginCell = row.querySelector(".margin");
+    const noteCell = row.querySelector(".note");
+    const profit = price - cost;
+    const margin = (price > 0) ? (profit / price * 100) : 0;
+
+    if (price > 0 && cost >= 0) {
+      profitCell.textContent = formatMoney(profit);
+      marginCell.textContent = Math.round(margin) + "%";
+      if (margin < 10) {
+        marginCell.classList.add("low-margin");
+      } else {
+        marginCell.classList.remove("low-margin");
+      }
+      sumPrice += price;
+      sumCost += cost;
+      sumProfit += profit;
+    } else {
+      profitCell.textContent = "-";
+      marginCell.textContent = "-";
+    }
+  });
+
+  document.getElementById("sumPrice").textContent = formatMoney(sumPrice);
+  document.getElementById("sumCost").textContent = formatMoney(sumCost);
+  document.getElementById("sumProfit").textContent = formatMoney(sumProfit);
+  document.getElementById("avgMargin").textContent = (sumPrice > 0)
+    ? Math.round(sumProfit / sumPrice * 100) + "%" : "-";
+}
+
+function addRow() {
+  const table = document.querySelector("#profitTable tbody");
+  const newRow = document.createElement("tr");
+  newRow.innerHTML = `
+    <td><input class="name" value="新項目" /></td>
+    <td><input type="number" class="price" /></td>
+    <td><input type="number" class="cost" /></td>
+    <td class="profit">-</td>
+    <td class="margin">-</td>
+    <td><input class="note" /></td>`;
+  table.appendChild(newRow);
+  newRow.querySelectorAll("input").forEach(i => i.addEventListener("input", calculate));
+}
+
+function sortRows() {
+  const tbody = document.querySelector("#profitTable tbody");
+  const rows = Array.from(tbody.querySelectorAll("tr"));
+  rows.sort((a, b) => {
+    const nameA = a.querySelector(".name").value.toLowerCase();
+    const nameB = b.querySelector(".name").value.toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+  rows.forEach(row => tbody.appendChild(row));
+  calculate();
+}
+
+function exportExcel() {
+  const wb = XLSX.utils.book_new();
+  const ws_data = [
+    ["名稱", "售價", "成本", "利潤", "毛利率%", "備註"]
+  ];
+
+  const rows = document.querySelectorAll("#profitTable tbody tr");
+  rows.forEach((row, i) => {
+    const name = row.querySelector(".name").value;
+    const price = row.querySelector(".price").value;
+    const cost = row.querySelector(".cost").value;
+    const note = row.querySelector(".note").value;
+    const rowNum = i + 2;
+    const formula_profit = { f: `C${rowNum}-D${rowNum}` };
+    const formula_margin = { f: `IF(C${rowNum}=0,"",E${rowNum}/C${rowNum})` };
+    ws_data.push([name, Number(price), Number(cost), formula_profit, formula_margin, note]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+  XLSX.utils.book_append_sheet(wb, ws, "試算表");
+  XLSX.writeFile(wb, "成本利潤_含公式.xlsx");
+}
+
+function uploadExcel() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".xlsx";
+  input.onchange = function(event) {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = e.target.result;
+        const wb = XLSX.read(data, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        const table = document.querySelector("#profitTable tbody");
+        table.innerHTML = "";
+        json.slice(1).forEach(row => {
+          const newRow = document.createElement("tr");
+          newRow.innerHTML = `
+            <td><input class="name" value="${row[0]}" /></td>
+            <td><input type="number" class="price" value="${row[1]}" /></td>
+            <td><input type="number" class="cost" value="${row[2]}" /></td>
+            <td class="profit">-</td>
+            <td class="margin">-</td>
+            <td><input class="note" value="${row[5]}" /></td>`;
+          table.appendChild(newRow);
+          newRow.querySelectorAll("input").forEach(i => i.addEventListener("input", calculate));
+        });
+        calculate();
+      };
+      reader.readAsBinaryString(file);
+    }
+  };
+  input.click();
+}
+
+function adjustMargin() {
+  const marginChange = parseFloat(document.getElementById("marginChange").value) || 0;
+  const rows = document.querySelectorAll("#profitTable tbody tr");
+  rows.forEach(row => {
+    const priceInput = row.querySelector(".price");
+    const costInput = row.querySelector(".cost");
+    const currentMargin = parseFloat(row.querySelector(".margin").textContent) || 0;
+    if (priceInput && costInput) {
+      const price = parseFloat(priceInput.value);
+      const cost = parseFloat(costInput.value);
+      const newMargin = currentMargin + marginChange;
+      const newPrice = cost / (1 - newMargin / 100);
+      priceInput.value = newPrice.toFixed(2);
+    }
+  });
+  calculate();
+}
+
+document.querySelectorAll("input").forEach(i => i.addEventListener("input", calculate));
+window.onload = calculate;
+</script>
+</body>
+</html>
